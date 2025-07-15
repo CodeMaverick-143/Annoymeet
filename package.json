@@ -4,11 +4,10 @@
   "version": "0.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite --config vite.config.js",
+    "dev": "vite",
     "build": "vite build",
-    "lint": "eslint .",
     "preview": "vite preview",
-    "start": "vite --config vite.config.js"
+    "lint": "eslint ."
   },
   "dependencies": {
     "@dicebear/collection": "^9.2.3",
