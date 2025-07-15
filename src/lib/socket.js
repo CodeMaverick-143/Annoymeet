@@ -16,7 +16,7 @@ class SocketService {
 
     // Create socket connection
     this.socket = io(BACKEND_URL, {
-      transports: ['websocket', 'polling'],
+      transports: ['polling'],
       timeout: 20000,
       forceNew: true,
       withCredentials: false,
@@ -49,7 +49,7 @@ class SocketService {
 
       setTimeout(() => {
         this.connect();
-      }, 1000 * this.reconnectAttempts); // Exponential backoff
+      }, 1000 * this.reconnectAttempts); 
     } else {
       console.error('❌ Max reconnect attempts reached. Giving up.');
     }
