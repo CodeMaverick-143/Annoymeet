@@ -10,9 +10,7 @@ const server = http.createServer(app);
 const io = socketIo(server, {
   cors: {
     origin: [
-      "https://annoymeet.vercel.app",
-      "http://localhost:5173",
-      "https://localhost:5173"
+      "https://annoymeet.vercel.app"
     ],
     methods: ["GET", "POST"],
     credentials: true
@@ -22,9 +20,7 @@ const io = socketIo(server, {
 // Middleware
 app.use(cors({
   origin: [
-    "https://annoymeet.vercel.app",
-    "http://localhost:5173",
-    "https://localhost:5173"
+    "https://annoymeet.vercel.app"
   ],
   credentials: true
 }));
