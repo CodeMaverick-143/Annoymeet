@@ -169,6 +169,32 @@ const LandingPage = ({ onCreateRoom, onJoinRoom, onViewHistory, onAuthRequired }
           <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 w-[600px] h-[600px] bg-gradient-to-r from-blue-400/10 to-indigo-400/10 rounded-full blur-3xl"></div>
         </div>
       </main>
+      {/* Footer */}
+      <footer className="w-full bg-white/80 dark:bg-slate-900/80 border-t border-slate-200/50 dark:border-slate-700/50 shadow-inner mt-auto backdrop-blur-sm">
+        <div className="max-w-7xl mx-auto px-6 py-6 flex flex-col md:flex-row items-center justify-between gap-4 text-center text-slate-600 dark:text-slate-300">
+          <div className="flex items-center gap-2 justify-center">
+            <MessageSquare className="w-5 h-5 text-indigo-500" />
+            <span className="font-semibold bg-gradient-to-r from-indigo-600 to-purple-600 bg-clip-text text-transparent">AnonyMeet</span>
+            <span className="mx-2">|</span>
+            <span className="text-xs">© {new Date().getFullYear()} All rights reserved to NST-SDC</span>
+          </div>
+          <div className="flex flex-col md:flex-row items-center gap-2 md:gap-4 justify-center">
+            <div className="flex items-center gap-3 mb-1 md:mb-0">
+              <a href="https://github.com/arpitsarang/AnonyMeet" target="_blank" rel="noopener noreferrer" aria-label="GitHub" className="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"><svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.477 2 2 6.484 2 12.021c0 4.428 2.867 8.184 6.839 9.504.5.092.682-.217.682-.482 0-.237-.009-.868-.014-1.703-2.782.605-3.369-1.342-3.369-1.342-.454-1.154-1.11-1.462-1.11-1.462-.908-.621.069-.609.069-.609 1.004.07 1.532 1.032 1.532 1.032.892 1.53 2.341 1.089 2.91.833.091-.647.35-1.09.636-1.341-2.22-.253-4.555-1.112-4.555-4.951 0-1.093.39-1.988 1.029-2.688-.103-.253-.446-1.272.098-2.65 0 0 .84-.27 2.75 1.025A9.564 9.564 0 0 1 12 6.844c.85.004 1.705.115 2.504.337 1.909-1.295 2.748-1.025 2.748-1.025.546 1.378.202 2.397.1 2.65.64.7 1.028 1.595 1.028 2.688 0 3.849-2.338 4.695-4.566 4.944.36.31.68.922.68 1.86 0 1.343-.012 2.428-.012 2.758 0 .267.18.577.688.479C19.135 20.2 22 16.448 22 12.021 22 6.484 17.523 2 12 2z"/></svg></a>
+              <a href="https://linkedin.com/in/arpitsarang" target="_blank" rel="noopener noreferrer" aria-label="LinkedIn" className="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"><svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.238-5-5-5zm-11.75 20h-3v-10h3v10zm-1.5-11.268c-.966 0-1.75-.785-1.75-1.75s.784-1.75 1.75-1.75 1.75.785 1.75 1.75-.784 1.75-1.75 1.75zm15.25 11.268h-3v-5.604c0-1.337-.025-3.062-1.865-3.062-1.867 0-2.154 1.459-2.154 2.967v5.699h-3v-10h2.881v1.367h.041c.401-.758 1.381-1.557 2.845-1.557 3.043 0 3.604 2.004 3.604 4.609v5.581z"/></svg></a>
+              <a href="https://youtube.com/@arpitsarang" target="_blank" rel="noopener noreferrer" aria-label="YouTube" className="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"><svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M23.498 6.186a2.99 2.99 0 0 0-2.104-2.116C19.088 3.5 12 3.5 12 3.5s-7.088 0-9.394.57A2.99 2.99 0 0 0 .502 6.186C0 8.488 0 12 0 12s0 3.512.502 5.814a2.99 2.99 0 0 0 2.104 2.116C4.912 20.5 12 20.5 12 20.5s7.088 0 9.394-.57a2.99 2.99 0 0 0 2.104-2.116C24 15.512 24 12 24 12s0-3.512-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg></a>
+              <a href="https://discord.gg/yourdiscord" target="_blank" rel="noopener noreferrer" aria-label="Discord" className="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"><svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M20.317 4.369A19.791 19.791 0 0 0 16.885 3.1a.112.112 0 0 0-.119.056 13.731 13.731 0 0 0-.601 1.234 18.27 18.27 0 0 0-5.514 0 12.276 12.276 0 0 0-.614-1.234.115.115 0 0 0-.119-.056A19.736 19.736 0 0 0 3.683 4.369a.105.105 0 0 0-.051.043C.533 9.043-.319 13.579.099 18.057a.116.116 0 0 0 .045.082 19.9 19.9 0 0 0 5.993 3.04.112.112 0 0 0 .123-.04c.463-.634.874-1.3 1.226-1.994a.112.112 0 0 0-.061-.153 13.138 13.138 0 0 1-1.888-.9.112.112 0 0 1-.011-.186c.127-.096.254-.192.374-.291a.112.112 0 0 1 .114-.013c3.927 1.793 8.18 1.793 12.061 0a.112.112 0 0 1 .115.012c.12.099.247.195.374.291a.112.112 0 0 1-.01.186 12.64 12.64 0 0 1-1.889.899.112.112 0 0 0-.06.154c.36.693.772 1.36 1.225 1.993a.112.112 0 0 0 .123.04 19.876 19.876 0 0 0 6.002-3.04.112.112 0 0 0 .045-.081c.5-5.177-.838-9.673-3.633-13.645a.104.104 0 0 0-.05-.044zM8.02 15.331c-1.183 0-2.156-1.085-2.156-2.419 0-1.333.955-2.418 2.156-2.418 1.21 0 2.175 1.094 2.156 2.418 0 1.334-.955 2.419-2.156 2.419zm7.974 0c-1.183 0-2.156-1.085-2.156-2.419 0-1.333.955-2.418 2.156-2.418 1.21 0 2.175 1.094 2.156 2.418 0 1.334-.946 2.419-2.156 2.419z"/></svg></a>
+              <a href="https://x.com/arpitsarang" target="_blank" rel="noopener noreferrer" aria-label="X (Twitter)" className="hover:text-indigo-600 dark:hover:text-indigo-400 transition-colors"><svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M17.53 2.477h3.934l-8.61 9.86 10.16 13.186h-7.97l-6.23-8.017-7.16 8.017H0l9.21-10.55L-.64 2.477h8.09l5.43 7.01zm-1.14 17.04h2.18L7.5 4.6H5.2z"/></svg></a>
+            </div>
+            <div className="flex items-center gap-3">
+              <a href="/privacy" className="text-xs text-slate-500 dark:text-slate-400 hover:underline">Privacy</a>
+              <span className="mx-1">·</span>
+              <a href="/policy" className="text-xs text-slate-500 dark:text-slate-400 hover:underline">Policy</a>
+            </div>
+          
+          </div>
+        </div>
+      </footer>
     </div>
   );
 };
