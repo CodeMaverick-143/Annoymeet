@@ -8,27 +8,34 @@ class SocketService {
   }
 
   connect() {
-    if (this.socket?.connected) {
-      return this.socket;
-    }
+    if (this.socket?.connected) return this.socket;
 
-    this.socket = io(import.meta.env.VITE_BACKEND_URL || 'https://annoymeet.onrender.com', {
+    // Resolve the backend URL
+    const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'https://annoymeet.onrender.com';
+    console.log('🛰️ Connecting to Socket.IO backend at:', BACKEND_URL);
+
+    // Create socket connection
+    this.socket = io(BACKEND_URL, {
       transports: ['websocket', 'polling'],
       timeout: 20000,
-      forceNew: true
+      forceNew: true,
+      withCredentials: false,
     });
 
+    // On successful connection
     this.socket.on('connect', () => {
-      console.log('Connected to Socket.IO server');
+      console.log('✅ Connected to Socket.IO server');
       this.reconnectAttempts = 0;
     });
 
+    // On disconnect
     this.socket.on('disconnect', (reason) => {
-      console.log('Disconnected from Socket.IO server:', reason);
+      console.warn('⚠️ Disconnected from Socket.IO server:', reason);
     });
 
+    // On connection error
     this.socket.on('connect_error', (error) => {
-      console.error('Socket connection error:', error);
+      console.error('❌ Socket connection error:', error.message || error);
       this.handleReconnect();
     });
 
@@ -38,11 +45,13 @@ class SocketService {
   handleReconnect() {
     if (this.reconnectAttempts < this.maxReconnectAttempts) {
       this.reconnectAttempts++;
-      console.log(`Attempting to reconnect... (${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
-      
+      console.log(`🔄 Attempting to reconnect... (${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
+
       setTimeout(() => {
         this.connect();
-      }, 1000 * this.reconnectAttempts);
+      }, 1000 * this.reconnectAttempts); // Exponential backoff
+    } else {
+      console.error('❌ Max reconnect attempts reached. Giving up.');
     }
   }
 
@@ -67,7 +76,7 @@ class SocketService {
   }
 
   // Message methods
-  sendMessage(roomId, userId, content, anonymousId, replyTo) {
+  sendMessage(roomId, userId, content, anonymousId, replyTo = null) {
     this.socket?.emit('send_message', { roomId, userId, content, anonymousId, replyTo });
   }
 
