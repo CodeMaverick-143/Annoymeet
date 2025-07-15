@@ -12,7 +12,7 @@ class SocketService {
       return this.socket;
     }
 
-    this.socket = io(import.meta.env.VITE_BACKEND_URL || 'http://localhost:3001', {
+    this.socket = io(import.meta.env.VITE_BACKEND_URL || 'https://annoymeet.onrender.com', {
       transports: ['websocket', 'polling'],
       timeout: 20000,
       forceNew: true
