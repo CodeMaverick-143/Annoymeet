@@ -7,21 +7,21 @@ require('dotenv').config();
 
 const app = express();
 const server = http.createServer(app);
+const allowedOrigins = [
+  "http://localhost:5173",
+  "https://annoymeet.vercel.app"
+];
+
 const io = socketIo(server, {
   cors: {
-    origin: [
-      "https://annoymeet.vercel.app"
-    ],
+    origin: allowedOrigins,
     methods: ["GET", "POST"],
     credentials: true
   }
 });
 
-// Middleware
 app.use(cors({
-  origin: [
-    "https://annoymeet.vercel.app"
-  ],
+  origin: allowedOrigins,
   credentials: true
 }));
 app.use(express.json());
