@@ -356,17 +356,23 @@ const Chatroom = ({ onLeaveRoom }) => {
                   </div>
                 </div>
                 <div className="space-y-6">
-                  {polls.map(poll => (
-                    <PollCard
-                      key={poll.id}
-                      poll={poll}
-                      onVote={handleVotePoll}
-                      isOrganizer={currentRoom && currentRoom.organizer_id === (user?.id || localStorage.getItem(`anonymeet_anon_id_${code}`))}
-                      currentUserId={user?.id}
-                      currentAnonymousId={localStorage.getItem(`anonymeet_anon_id_${code}`)}
-                      onEndPoll={endPoll}
-                    />
-                  ))}
+                  {console.log('DEBUG: polls array', polls)}
+{polls.length === 0 && (
+  <div className="text-center text-slate-400 dark:text-slate-500 py-8">
+    No polls.
+  </div>
+)}
+{polls.map(poll => (
+  <PollCard
+    key={poll.id}
+    poll={poll}
+    onVote={handleVotePoll}
+    isOrganizer={currentRoom && currentRoom.organizer_id === (user?.id || localStorage.getItem(`anonymeet_anon_id_${code}`))}
+    currentUserId={user?.id}
+    currentAnonymousId={localStorage.getItem(`anonymeet_anon_id_${code}`)}
+    onEndPoll={endPoll}
+  />
+))}
                 </div>
               </div>
             </div>
@@ -388,7 +394,7 @@ const Chatroom = ({ onLeaveRoom }) => {
               </div>
             </div>
             <div className="p-4 flex space-x-6 overflow-x-auto">
-              {polls.map(poll => (
+              {polls.filter(p => p.is_active).map(poll => (
                 <div key={poll.id} className="flex-shrink-0 w-96">
                   <PollCard
                     poll={poll}
