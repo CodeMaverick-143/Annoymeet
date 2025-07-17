@@ -24,7 +24,6 @@ export const RoomProvider = ({ children }) => {
   const [replyingTo, setReplyingTo] = useState(null);
   const [currentUserMember, setCurrentUserMember] = useState(null);
 
-  // Generate anonymous ID
   const generateAnonymousId = () => {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     let result = 'Anon#';
@@ -34,7 +33,6 @@ export const RoomProvider = ({ children }) => {
     return result;
   };
 
-  // Generate room code
   const generateRoomCode = () => {
     const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
     let result = '';
@@ -44,45 +42,30 @@ export const RoomProvider = ({ children }) => {
     return result;
   };
 
-  // Setup Socket.IO listeners
   useEffect(() => {
     if (!currentRoom || !user) return;
 
     const socket = socketService.connect();
 
-    // Message listeners
     socket.on('new_message', (messageData) => {
-      const newMessage = {
-        id: messageData.id,
-        room_id: messageData.roomId,
-        user_id: messageData.userId,
-        content: messageData.content,
-        reply_to: messageData.replyTo,
-        created_at: messageData.timestamp,
-        anonymous_id: messageData.anonymousId,
-        reactions: messageData.reactions
-      };
-      
-      setMessages(prev => [...prev, newMessage]);
+      setMessages(prev => [...prev, messageData]);
     });
 
-    socket.on('reaction_added', (reactionData) => {
+    socket.on('reaction_update', (reactionData) => {
       setMessages(prev => prev.map(msg => {
         if (msg.id === reactionData.messageId) {
-          const newReactions = { ...msg.reactions };
-          if (reactionData.reactionType === 'yes') {
-            newReactions.yes = (newReactions.yes || 0) + 1;
-          } else {
-            newReactions.no = (newReactions.no || 0) + 1;
-          }
-          return { ...msg, reactions: newReactions };
+          return {
+            ...msg,
+            reactions: reactionData.reactions,
+            user_reaction: reactionData.user_reactions[user.id] || null
+          };
         }
         return msg;
       }));
     });
 
-    // Poll listeners
     socket.on('new_poll', (pollData) => {
+      console.log('DEBUG: Received new_poll event', pollData);
       const newPoll = {
         id: pollData.id,
         room_id: pollData.roomId,
@@ -91,12 +74,12 @@ export const RoomProvider = ({ children }) => {
         poll_type: pollData.pollType,
         options: pollData.options,
         created_at: pollData.createdAt,
-        is_active: pollData.isActive,
+        is_active: pollData.isActive === undefined ? pollData.is_active : pollData.isActive,
         vote_counts: pollData.voteCounts,
         user_vote: null,
         total_votes: 0
       };
-      
+      console.log('DEBUG: newPoll mapped for state', newPoll);
       setPolls(prev => [newPoll, ...prev]);
     });
 
@@ -114,6 +97,28 @@ export const RoomProvider = ({ children }) => {
       }));
     });
 
+    socket.on('poll_ended', ({ pollId }) => {
+      console.log('DEBUG: Received poll_ended event', { pollId });
+      setPolls(prev => prev.filter(p => p.id !== pollId));
+    });
+
+    socket.on('room_state', (stateData) => {
+      console.log('DEBUG: Received room_state event', stateData);
+      setRoomMembers(stateData.members || []);
+      const mappedPolls = (stateData.polls || []).map(p => ({ ...p, user_vote: null, total_votes: Object.keys(p.votes || {}).length }));
+      setPolls(mappedPolls);
+    });
+
+    socket.on('user_joined', (joinData) => {
+      console.log('DEBUG: Received user_joined event', joinData);
+      setRoomMembers(joinData.members || []);
+    });
+
+    socket.on('user_left', (leftData) => {
+      console.log('DEBUG: Received user_left event', leftData);
+      setRoomMembers(leftData.members || []);
+    });
+
     socket.on('poll_ended', (endData) => {
       setPolls(prev => prev.map(poll => {
         if (poll.id === endData.pollId) {
@@ -128,7 +133,6 @@ export const RoomProvider = ({ children }) => {
       }));
     });
 
-    // Member listeners
     socket.on('user_joined', (data) => {
       setRoomMembers(data.members.map((member) => ({
         id: member.userId,
@@ -176,7 +180,6 @@ export const RoomProvider = ({ children }) => {
       })));
     });
 
-    // Error listeners
     socket.on('message_error', (error) => {
       console.error('Message error:', error.error);
       alert(error.error);
@@ -205,9 +208,8 @@ export const RoomProvider = ({ children }) => {
       socket.off('poll_error');
       socket.off('vote_error');
     };
-  }, [currentRoom, user]);
+  }, [currentRoom, user, isOrganizer]);
 
-  // Create room
   const createRoom = async (name) => {
     if (!user) throw new Error('User not authenticated');
     
@@ -227,7 +229,6 @@ export const RoomProvider = ({ children }) => {
 
       if (error) throw error;
 
-      // Join the room as creator
       const anonymousId = generateAnonymousId();
       const { error: memberError } = await supabase
         .from('room_members')
@@ -252,10 +253,8 @@ export const RoomProvider = ({ children }) => {
       };
       setCurrentUserMember(memberData);
       
-      // Join Socket.IO room
       socketService.joinRoom(room.id, user.id, anonymousId);
       
-      // Store in localStorage for persistence
       localStorage.setItem('anonymeet_current_room', JSON.stringify({
         room,
         isOrganizer: true,
@@ -271,13 +270,11 @@ export const RoomProvider = ({ children }) => {
     }
   };
 
-  // Join room
   const joinRoom = async (code) => {
     if (!user) throw new Error('User not authenticated');
     
     setLoading(true);
     try {
-      // Find room by code
       const { data: room, error: roomError } = await supabase
         .from('rooms')
         .select('*')
@@ -287,7 +284,6 @@ export const RoomProvider = ({ children }) => {
       if (roomError) throw new Error('Room not found');
       if (room.is_active === false) throw new Error('This room has ended and can no longer be joined.');
 
-      // Check if already a member
       const { data: existingMember } = await supabase
         .from('room_members')
         .select('*')
@@ -298,7 +294,6 @@ export const RoomProvider = ({ children }) => {
       let anonymousId;
       
       if (!existingMember) {
-        // Join the room
         anonymousId = generateAnonymousId();
         const { error: memberError } = await supabase
           .from('room_members')
@@ -310,7 +305,6 @@ export const RoomProvider = ({ children }) => {
         
         if (memberError) throw memberError;
       } else {
-        // Reactivate membership if inactive
         anonymousId = existingMember.anonymous_id;
         await supabase
           .from('room_members')
@@ -332,10 +326,8 @@ export const RoomProvider = ({ children }) => {
       };
       setCurrentUserMember(memberData);
       
-      // Join Socket.IO room
       socketService.joinRoom(room.id, user.id, anonymousId);
       
-      // Store in localStorage for persistence
       localStorage.setItem('anonymeet_current_room', JSON.stringify({
         room,
         isOrganizer: organizer,
@@ -351,7 +343,6 @@ export const RoomProvider = ({ children }) => {
     }
   };
 
-  // Leave room
   const leaveRoom = async () => {
     if (!user || !currentRoom || !currentUserMember) return;
 
@@ -362,7 +353,6 @@ export const RoomProvider = ({ children }) => {
         .eq('room_id', currentRoom.id)
         .eq('user_id', user.id);
 
-      // Leave Socket.IO room
       socketService.leaveRoom(currentRoom.id, user.id, currentUserMember.anonymous_id);
 
       setCurrentRoom(null);
@@ -372,7 +362,6 @@ export const RoomProvider = ({ children }) => {
       setIsOrganizer(false);
       setCurrentUserMember(null);
       
-      // Clear from localStorage
       localStorage.removeItem('anonymeet_current_room');
     } catch (error) {
       console.error('Error leaving room:', error);
@@ -380,18 +369,15 @@ export const RoomProvider = ({ children }) => {
     }
   };
 
-  // End room (organizer only)
   const endRoom = async () => {
     if (!user || !currentRoom || !isOrganizer) return;
 
     try {
-      // Mark room as inactive
       await supabase
         .from('rooms')
         .update({ is_active: false, updated_at: new Date().toISOString() })
         .eq('id', currentRoom.id);
 
-      // Remove all members
       await supabase
         .from('room_members')
         .update({ is_active: false })
@@ -408,7 +394,6 @@ export const RoomProvider = ({ children }) => {
       setIsOrganizer(false);
       setCurrentUserMember(null);
       
-      // Clear from localStorage
       localStorage.removeItem('anonymeet_current_room');
     } catch (error) {
       console.error('Error ending room:', error);
@@ -416,12 +401,10 @@ export const RoomProvider = ({ children }) => {
     }
   };
 
-  // Send message
   const sendMessage = async (content, replyTo) => {
     if (!user || !currentRoom || !currentUserMember) return;
 
     try {
-      // Send via Socket.IO for real-time delivery
       socketService.sendMessage(
         currentRoom.id, 
         user.id, 
@@ -430,7 +413,6 @@ export const RoomProvider = ({ children }) => {
         replyTo
       );
 
-      // Also store in Supabase for persistence
       await supabase
         .from('messages')
         .insert({
@@ -446,68 +428,23 @@ export const RoomProvider = ({ children }) => {
     }
   };
 
-  // Add reaction
-  const addReaction = async (messageId, type) => {
-    if (!user || !currentRoom || !currentUserMember) return;
+  const addReaction = (messageId, type) => {
+    if (!user || !currentRoom) return;
 
-    try {
-      // Send via Socket.IO for real-time updates
-      socketService.addReaction(
-        currentRoom.id, 
-        messageId, 
-        user.id, 
-        type, 
-        currentUserMember.anonymous_id
-      );
-
-      // Handle database storage
-      const { data: existingReaction } = await supabase
-        .from('message_reactions')
-        .select('*')
-        .eq('message_id', messageId)
-        .eq('user_id', user.id)
-        .eq('reaction_type', type)
-        .maybeSingle();
-
-      if (existingReaction) {
-        // Remove reaction if it exists
-        await supabase
-          .from('message_reactions')
-          .delete()
-          .eq('id', existingReaction.id);
-      } else {
-        // Remove opposite reaction if it exists
-        await supabase
-          .from('message_reactions')
-          .delete()
-          .eq('message_id', messageId)
-          .eq('user_id', user.id)
-          .neq('reaction_type', type);
-
-        // Add new reaction
-        await supabase
-          .from('message_reactions')
-          .insert({
-            message_id: messageId,
-            user_id: user.id,
-            reaction_type: type,
-          });
-      }
-      
-    } catch (error) {
-      console.error('Error adding reaction:', error);
-      throw error;
-    }
+    socketService.addReaction(
+      currentRoom.id,
+      messageId,
+      user.id,
+      type
+    );
   };
 
-  // Create poll
   const createPoll = async (question, type, options) => {
     if (!user || !currentRoom || !currentUserMember) return;
 
     try {
       const pollOptions = type === 'yesno' ? ['Yes', 'No'] : (options || []);
       
-      // Send via Socket.IO for real-time delivery
       socketService.createPoll(
         currentRoom.id,
         user.id,
@@ -517,7 +454,6 @@ export const RoomProvider = ({ children }) => {
         currentUserMember.anonymous_id
       );
 
-      // Also store in Supabase for persistence
       await supabase
         .from('polls')
         .insert({
@@ -534,12 +470,10 @@ export const RoomProvider = ({ children }) => {
     }
   };
 
-  // Vote on poll
   const votePoll = async (pollId, optionIndex) => {
     if (!user || !currentRoom || !currentUserMember) return;
 
     try {
-      // Send via Socket.IO for real-time updates
       socketService.votePoll(
         currentRoom.id,
         pollId,
@@ -548,7 +482,6 @@ export const RoomProvider = ({ children }) => {
         currentUserMember.anonymous_id
       );
 
-      // Handle database storage
       const { data: existingVote } = await supabase
         .from('poll_votes')
         .select('*')
@@ -557,13 +490,11 @@ export const RoomProvider = ({ children }) => {
         .maybeSingle();
 
       if (existingVote) {
-        // Update existing vote
         await supabase
           .from('poll_votes')
           .update({ option_index: optionIndex })
           .eq('id', existingVote.id);
       } else {
-        // Create new vote
         await supabase
           .from('poll_votes')
           .insert({
@@ -579,15 +510,12 @@ export const RoomProvider = ({ children }) => {
     }
   };
 
-  // End poll
   const endPoll = async (pollId) => {
     if (!user || !currentRoom) return;
 
     try {
-      // Send via Socket.IO for real-time updates
       socketService.endPoll(currentRoom.id, pollId, user.id);
 
-      // Update in Supabase
       await supabase
         .from('polls')
         .update({ is_active: false })
@@ -599,7 +527,6 @@ export const RoomProvider = ({ children }) => {
     }
   };
 
-  // Restore room from localStorage on app start
   useEffect(() => {
     if (!user) return;
 
@@ -608,7 +535,6 @@ export const RoomProvider = ({ children }) => {
       try {
         const { room, isOrganizer: savedIsOrganizer, anonymousId } = JSON.parse(savedRoom);
         
-        // Verify room still exists and user is still a member
         supabase
           .from('room_members')
           .select('*, rooms(*)')
@@ -629,7 +555,6 @@ export const RoomProvider = ({ children }) => {
                 is_active: true
               });
               
-              // Rejoin Socket.IO room
               socketService.joinRoom(room.id, user.id, anonymousId);
             } else {
               localStorage.removeItem('anonymeet_current_room');
@@ -641,16 +566,14 @@ export const RoomProvider = ({ children }) => {
     }
   }, [user, currentRoom]);
 
-  // Load initial room data from Supabase
   useEffect(() => {
     if (!currentRoom || !user) return;
 
     const loadInitialData = async () => {
       try {
-        // Load messages
         const { data: messagesData } = await supabase
           .from('messages')
-          .select('*')
+          .select('*, reply_to_message:reply_to (*)')
           .eq('room_id', currentRoom.id)
           .order('created_at', { ascending: true });
 
@@ -659,20 +582,21 @@ export const RoomProvider = ({ children }) => {
             messagesData.map(async (msg) => {
               const { data: reactions } = await supabase
                 .from('message_reactions')
-                .select('reaction_type')
+                .select('reaction_type, user_id')
                 .eq('message_id', msg.id);
 
-              const reactionCounts = reactions?.reduce(
-                (acc, reaction) => {
-                  acc[reaction.reaction_type]++;
-                  return acc;
-                },
-                { yes: 0, no: 0 }
-              ) || { yes: 0, no: 0 };
+              const reactionCounts = reactions?.reduce((acc, reaction) => {
+                acc[reaction.reaction_type] = (acc[reaction.reaction_type] || 0) + 1;
+                return acc;
+              }, {}) || {};
+
+              const userReaction = reactions?.find(r => r.user_id === user.id)?.reaction_type || null;
 
               return {
                 ...msg,
+                reply_to_message: msg.reply_to_message || null,
                 reactions: reactionCounts,
+                user_reaction: userReaction,
               };
             })
           );
