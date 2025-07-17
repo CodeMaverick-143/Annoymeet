@@ -8,7 +8,6 @@ require('dotenv').config();
 const app = express();
 const server = http.createServer(app);
 const allowedOrigins = [
-  "http://localhost:5173",
   "https://annoymeet.vercel.app"
 ];
 
@@ -26,24 +25,29 @@ app.use(cors({
 }));
 app.use(express.json());
 
-// Profanity filter
 const filter = new Filter();
-
-// Store active rooms and users
 const rooms = new Map();
 const userSockets = new Map();
+const roomCleanupTimers = new Map();
+const supabase = require('./utils/supabase');
 
-// Helper functions
 const getRoomMembers = (roomId) => {
   const room = rooms.get(roomId);
   return room ? Array.from(room.members.values()) : [];
 };
 
 const addUserToRoom = (roomId, userId, socketId, anonymousId) => {
+  if (roomCleanupTimers.has(roomId)) {
+    clearTimeout(roomCleanupTimers.get(roomId));
+    roomCleanupTimers.delete(roomId);
+    console.log(`Canceled cleanup for room ${roomId}`);
+  }
+
   if (!rooms.has(roomId)) {
     rooms.set(roomId, {
       id: roomId,
       members: new Map(),
+      messages: [],
       polls: new Map()
     });
   }
@@ -56,7 +60,7 @@ const addUserToRoom = (roomId, userId, socketId, anonymousId) => {
     joinedAt: new Date().toISOString()
   });
   
-  userSockets.set(socketId, { userId, roomId });
+  userSockets.set(socketId, { userId, roomId, anonymousId });
 };
 
 const removeUserFromRoom = (roomId, userId) => {
@@ -64,7 +68,13 @@ const removeUserFromRoom = (roomId, userId) => {
   if (room) {
     room.members.delete(userId);
     if (room.members.size === 0) {
-      rooms.delete(roomId);
+      console.log(`Room ${roomId} is empty, starting cleanup timer.`);
+      const timerId = setTimeout(() => {
+        rooms.delete(roomId);
+        roomCleanupTimers.delete(roomId);
+        console.log(`Cleaned up empty room ${roomId}`);
+      }, 30000);
+      roomCleanupTimers.set(roomId, timerId);
     }
   }
 };
@@ -87,12 +97,10 @@ const containsProfanity = (content) => {
   }
 };
 
-// Socket.IO connection handling
 io.on('connection', (socket) => {
   console.log('User connected:', socket.id);
 
-  // Join room
-  socket.on('join_room', (data) => {
+  socket.on('join_room', async (data) => {
     const { roomId, userId, anonymousId } = data;
     
     socket.join(roomId);
@@ -100,26 +108,41 @@ io.on('connection', (socket) => {
     
     const members = getRoomMembers(roomId);
     
-    // Notify all users in room about new member
     io.to(roomId).emit('user_joined', {
       userId,
       anonymousId,
-      members
+      members,
+      organizer_id: rooms.get(roomId)?.organizer_id
     });
     
-    // Send current room state to joining user
+    const { data: activePolls, error: pollsError } = await supabase
+      .from('polls')
+      .select('*')
+      .eq('room_id', roomId)
+      .eq('is_active', true);
+
+    if (pollsError) {
+      console.error('Error fetching polls from Supabase:', pollsError);
+    } else {
+      const room = rooms.get(roomId);
+      if (room) {
+        room.polls.clear();
+        activePolls.forEach(poll => room.polls.set(poll.id, poll));
+      }
+    }
+
     const room = rooms.get(roomId);
     if (room) {
       socket.emit('room_state', {
         members,
-        polls: Array.from(room.polls.values())
+        messages: room.messages,
+        polls: activePolls || []
       });
     }
     
     console.log(`User ${anonymousId} joined room ${roomId}`);
   });
 
-  // Leave room
   socket.on('leave_room', (data) => {
     const { roomId, userId, anonymousId } = data;
     
@@ -128,7 +151,6 @@ io.on('connection', (socket) => {
     
     const members = getRoomMembers(roomId);
     
-    // Notify remaining users
     socket.to(roomId).emit('user_left', {
       userId,
       anonymousId,
@@ -139,11 +161,9 @@ io.on('connection', (socket) => {
     console.log(`User ${anonymousId} left room ${roomId}`);
   });
 
-  // Handle new message
   socket.on('send_message', (data) => {
     const { roomId, userId, content, anonymousId, replyTo } = data;
     
-    // Check for profanity
     if (containsProfanity(content)) {
       socket.emit('message_error', {
         error: 'Message contains inappropriate content and cannot be sent.'
@@ -152,45 +172,79 @@ io.on('connection', (socket) => {
     }
     
     const cleanedContent = cleanMessage(content);
-    
+    const room = rooms.get(roomId);
+
     const messageData = {
       id: `msg_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
-      roomId,
-      userId,
+      user_id: userId,
       content: cleanedContent,
-      anonymousId,
-      replyTo,
-      timestamp: new Date().toISOString(),
-      reactions: { yes: 0, no: 0 }
+      anonymous_id: anonymousId,
+      created_at: new Date().toISOString(),
+      reactions: {},
+      user_reactions: {},
+      reply_to: replyTo,
+      parent_message: null
     };
+
+    if (replyTo && room) {
+      const parentMessage = room.messages.find(m => m.id === replyTo);
+      if (parentMessage) {
+        messageData.parent_message = {
+          id: parentMessage.id,
+          content: parentMessage.content,
+          anonymous_id: parentMessage.anonymous_id
+        };
+      }
+    }
+
+    if (room) {
+      room.messages.push(messageData);
+    }
     
-    // Broadcast to all users in room
     io.to(roomId).emit('new_message', messageData);
     console.log(`Message sent in room ${roomId} by ${anonymousId}`);
   });
 
-  // Handle message reaction
   socket.on('add_reaction', (data) => {
-    const { roomId, messageId, userId, reactionType, anonymousId } = data;
-    
+    const { roomId, messageId, userId, reactionType } = data;
+    const room = rooms.get(roomId);
+    if (!room) return;
+
+    const message = room.messages.find(m => m.id === messageId);
+    if (!message) return;
+
+    const userCurrentReaction = message.user_reactions[userId];
+
+    if (userCurrentReaction === reactionType) {
+      message.reactions[reactionType] = (message.reactions[reactionType] || 0) - 1;
+      if (message.reactions[reactionType] <= 0) {
+        delete message.reactions[reactionType];
+      }
+      delete message.user_reactions[userId];
+    } else {
+      if (userCurrentReaction) {
+        message.reactions[userCurrentReaction] = (message.reactions[userCurrentReaction] || 0) - 1;
+        if (message.reactions[userCurrentReaction] <= 0) {
+          delete message.reactions[userCurrentReaction];
+        }
+      }
+      message.reactions[reactionType] = (message.reactions[reactionType] || 0) + 1;
+      message.user_reactions[userId] = reactionType;
+    }
+
     const reactionData = {
       messageId,
-      userId,
-      reactionType,
-      anonymousId,
-      timestamp: new Date().toISOString()
+      reactions: message.reactions,
+      user_reactions: message.user_reactions
     };
-    
-    // Broadcast reaction to all users in room
-    io.to(roomId).emit('reaction_added', reactionData);
-    console.log(`Reaction ${reactionType} added to message ${messageId} by ${anonymousId}`);
+
+    io.to(roomId).emit('reaction_update', reactionData);
+    console.log(`Reaction updated for message ${messageId} by ${userId}`);
   });
 
-  // Handle poll creation
-  socket.on('create_poll', (data) => {
+  socket.on('create_poll', async (data) => {
     const { roomId, userId, question, pollType, options, anonymousId } = data;
     
-    // Check for profanity in question and options
     if (containsProfanity(question)) {
       socket.emit('poll_error', {
         error: 'Poll question contains inappropriate content.'
@@ -226,59 +280,73 @@ io.on('connection', (socket) => {
       creatorAnonymousId: anonymousId
     };
     
-    // Store poll in room
     const room = rooms.get(roomId);
     if (room) {
       room.polls.set(pollId, pollData);
     }
     
-    // Broadcast new poll to all users in room
+    const { error } = await supabase.from('polls').insert([{
+      id: pollId,
+      room_id: roomId,
+      created_by: userId,
+      creator_anonymous_id: anonymousId,
+      question: pollData.question,
+      poll_type: pollType,
+      options: cleanOptions,
+      votes: {},
+      vote_counts: pollData.voteCounts,
+      is_active: true
+    }]);
+
+    if (error) {
+      console.error('Error saving poll to Supabase:', error);
+      socket.emit('poll_error', { error: 'Could not save the poll.' });
+      return;
+    }
+
     io.to(roomId).emit('new_poll', pollData);
     console.log(`Poll created in room ${roomId} by ${anonymousId}`);
   });
 
-  // Handle poll vote
-  socket.on('vote_poll', (data) => {
-    const { roomId, pollId, userId, optionIndex, anonymousId } = data;
-    
+  socket.on('vote_poll', async ({ roomId, pollId, userId, optionIndex, anonymousId }) => {
+    if (!rooms.has(roomId)) return;
+
     const room = rooms.get(roomId);
-    if (!room || !room.polls.has(pollId)) {
-      socket.emit('vote_error', { error: 'Poll not found' });
-      return;
-    }
-    
     const poll = room.polls.get(pollId);
-    
-    if (!poll.isActive) {
-      socket.emit('vote_error', { error: 'Poll has ended' });
-      return;
-    }
-    
-    // Remove previous vote if exists
-    if (poll.votes[userId] !== undefined) {
-      poll.voteCounts[poll.votes[userId]]--;
-    }
-    
-    // Add new vote
+    if (!poll) return;
+
     poll.votes[userId] = optionIndex;
-    poll.voteCounts[optionIndex]++;
-    
+
+    poll.voteCounts = poll.options.map((_, index) => 
+      Object.values(poll.votes).filter(vote => vote === index).length
+    );
+    const totalVotes = Object.keys(poll.votes).length;
+
     const voteData = {
       pollId,
       userId,
       optionIndex,
       anonymousId,
       voteCounts: poll.voteCounts,
-      totalVotes: Object.keys(poll.votes).length
+      totalVotes
     };
     
-    // Broadcast vote update to all users in room
+    const { error } = await supabase
+      .from('polls')
+      .update({ votes: poll.votes, vote_counts: poll.voteCounts })
+      .eq('id', pollId);
+
+    if (error) {
+      console.error('Error updating poll vote in Supabase:', error);
+      socket.emit('poll_error', { error: 'Could not save your vote.' });
+      return;
+    }
+
     io.to(roomId).emit('poll_vote_update', voteData);
     console.log(`Vote cast in poll ${pollId} by ${anonymousId}`);
   });
 
-  // Handle end poll
-  socket.on('end_poll', (data) => {
+  socket.on('end_poll', async (data) => {
     const { roomId, pollId, userId } = data;
     
     const room = rooms.get(roomId);
@@ -289,40 +357,40 @@ io.on('connection', (socket) => {
     
     const poll = room.polls.get(pollId);
     
-    // Check if user is poll creator or room organizer
     if (poll.createdBy !== userId) {
       socket.emit('poll_error', { error: 'Only poll creator can end the poll' });
       return;
     }
     
-    poll.isActive = false;
-    poll.endedAt = new Date().toISOString();
+    const { error } = await supabase
+      .from('polls')
+      .update({ is_active: false })
+      .eq('id', pollId);
+
+    if (error) {
+      console.error('Error ending poll in Supabase:', error);
+      socket.emit('poll_error', { error: 'Could not end the poll.' });
+      return;
+    }
+
+    room.polls.delete(pollId);
     
-    // Broadcast poll end to all users in room
-    io.to(roomId).emit('poll_ended', {
-      pollId,
-      endedBy: userId,
-      finalResults: {
-        voteCounts: poll.voteCounts,
-        totalVotes: Object.keys(poll.votes).length
-      }
-    });
+    io.to(roomId).emit('poll_ended', { pollId });
     
     console.log(`Poll ${pollId} ended in room ${roomId}`);
   });
 
-  // Handle disconnect
   socket.on('disconnect', () => {
     const userInfo = userSockets.get(socket.id);
     if (userInfo) {
-      const { userId, roomId } = userInfo;
+      const { userId, roomId, anonymousId } = userInfo;
       removeUserFromRoom(roomId, userId);
-      
+
       const members = getRoomMembers(roomId);
-      
-      // Notify remaining users
+
       socket.to(roomId).emit('user_left', {
         userId,
+        anonymousId,
         members
       });
       
@@ -333,7 +401,6 @@ io.on('connection', (socket) => {
   });
 });
 
-// Health check endpoint
 app.get('/health', (req, res) => {
   res.json({ 
     status: 'OK', 
