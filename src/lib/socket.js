@@ -10,30 +10,23 @@ class SocketService {
   connect() {
     if (this.socket?.connected) return this.socket;
 
-    // Resolve the backend URL
-    const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'https://annoymeet.onrender.com';
+    const BACKEND_URL = 'https://annoymeet.onrender.com';
     console.log('🛰️ Connecting to Socket.IO backend at:', BACKEND_URL);
 
-    // Create socket connection
     this.socket = io(BACKEND_URL, {
-      transports: ['polling'],
-      timeout: 20000,
-      forceNew: true,
-      withCredentials: false,
+      transports: ['websocket', 'polling'],
+      withCredentials: true,
     });
 
-    // On successful connection
     this.socket.on('connect', () => {
       console.log('✅ Connected to Socket.IO server');
       this.reconnectAttempts = 0;
     });
 
-    // On disconnect
     this.socket.on('disconnect', (reason) => {
       console.warn('⚠️ Disconnected from Socket.IO server:', reason);
     });
 
-    // On connection error
     this.socket.on('connect_error', (error) => {
       console.error('❌ Socket connection error:', error.message || error);
       this.handleReconnect();
@@ -49,7 +42,7 @@ class SocketService {
 
       setTimeout(() => {
         this.connect();
-      }, 1000 * this.reconnectAttempts); 
+      }, 1000 * this.reconnectAttempts);
     } else {
       console.error('❌ Max reconnect attempts reached. Giving up.');
     }
@@ -66,7 +59,6 @@ class SocketService {
     return this.socket;
   }
 
-  // Room methods
   joinRoom(roomId, userId, anonymousId) {
     this.socket?.emit('join_room', { roomId, userId, anonymousId });
   }
@@ -75,7 +67,6 @@ class SocketService {
     this.socket?.emit('leave_room', { roomId, userId, anonymousId });
   }
 
-  // Message methods
   sendMessage(roomId, userId, content, anonymousId, replyTo = null) {
     this.socket?.emit('send_message', { roomId, userId, content, anonymousId, replyTo });
   }
@@ -84,7 +75,6 @@ class SocketService {
     this.socket?.emit('add_reaction', { roomId, messageId, userId, reactionType, anonymousId });
   }
 
-  // Poll methods
   createPoll(roomId, userId, question, pollType, options, anonymousId) {
     this.socket?.emit('create_poll', { roomId, userId, question, pollType, options, anonymousId });
   }
